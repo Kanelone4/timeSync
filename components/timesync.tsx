@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { Clock, Globe, Plus, Star, Sun, Moon, ArrowRight, Calendar, X, Search, MapPin, Users } from "lucide-react"
+import { Clock, Globe, Plus, Star, Sun, Moon, ArrowRight, Calendar, X, Search, MapPin, Users, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -168,14 +168,20 @@ const REGIONS = ["All", "Europe", "North America", "South America", "Asia", "Mid
 
 export function TimeSync() {
   const [selectedCities, setSelectedCities] = useState<City[]>([CITIES[0], CITIES[27]])
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [sliderOffset, setSliderOffset] = useState(0)
   const [showCityPicker, setShowCityPicker] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [favorites, setFavorites] = useState<string[]>([])
   const [selectedRegion, setSelectedRegion] = useState("All")
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false)
+  const [isRightSidebarOpen, setIsRightSidebarOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
+  // Initialisation uniquement côté client
   useEffect(() => {
+    setMounted(true)
+    setCurrentTime(new Date())
     const interval = setInterval(() => {
       setCurrentTime(new Date())
     }, 1000)
@@ -189,7 +195,9 @@ export function TimeSync() {
     }
   }, [])
 
+  // Fonctions helpers avec vérification de currentTime
   const getTimeInTimezone = (timezone: string, offsetHours: number = 0) => {
+    if (!currentTime) return "--:--"
     const date = new Date(currentTime.getTime() + offsetHours * 60 * 60 * 1000)
     return new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
@@ -200,6 +208,7 @@ export function TimeSync() {
   }
 
   const getFullTimeInTimezone = (timezone: string, offsetHours: number = 0) => {
+    if (!currentTime) return "--:--:--"
     const date = new Date(currentTime.getTime() + offsetHours * 60 * 60 * 1000)
     return new Intl.DateTimeFormat("en-US", {
       hour: "2-digit",
@@ -211,6 +220,7 @@ export function TimeSync() {
   }
 
   const getDateInTimezone = (timezone: string) => {
+    if (!currentTime) return "--"
     return new Intl.DateTimeFormat("en-US", {
       weekday: "short",
       month: "short",
@@ -220,14 +230,15 @@ export function TimeSync() {
   }
 
   const getTimeDifference = (tz1: string, tz2: string) => {
-    const now = new Date()
-    const time1 = new Date(now.toLocaleString("en-US", { timeZone: tz1 }))
-    const time2 = new Date(now.toLocaleString("en-US", { timeZone: tz2 }))
+    if (!currentTime) return 0
+    const time1 = new Date(currentTime.toLocaleString("en-US", { timeZone: tz1 }))
+    const time2 = new Date(currentTime.toLocaleString("en-US", { timeZone: tz2 }))
     const diff = (time2.getTime() - time1.getTime()) / (1000 * 60 * 60)
     return diff
   }
 
   const getHourInTimezone = (timezone: string) => {
+    if (!currentTime) return 0
     return parseInt(
       new Intl.DateTimeFormat("en-US", {
         hour: "2-digit",
@@ -302,37 +313,98 @@ export function TimeSync() {
     return grouped
   }, [])
 
+  // Pendant l'hydratation, afficher un loader pour éviter le mismatch
+  if (!mounted || !currentTime) {
+    return (
+      <div className="flex h-full bg-background items-center justify-center min-h-screen">
+        <div className="animate-pulse text-muted-foreground text-center">
+          <Globe className="w-12 h-12 mx-auto mb-4 opacity-50" />
+          <p>Loading time zones...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex h-full bg-background">
-      {/* Left Sidebar - Cities */}
-      <aside className="w-80 border-r border-border bg-card p-4 flex flex-col">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-11 h-11 rounded-xl bg-chart-3/10 flex items-center justify-center">
-            <Globe className="w-6 h-6 text-chart-3" />
+    <div className="flex flex-col lg:flex-row h-full bg-background relative">
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center justify-between p-4 border-b border-border bg-card sticky top-0 z-30">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-xl bg-chart-3/10 flex items-center justify-center">
+            <Globe className="w-5 h-5 text-chart-3" />
           </div>
           <div>
-            <h2 className="font-bold text-lg text-foreground">TimeSync</h2>
+            <h2 className="font-bold text-foreground">TimeSync</h2>
             <p className="text-xs text-muted-foreground">World Time Converter</p>
           </div>
         </div>
-
-        <div className="flex gap-1 p-1 bg-secondary rounded-xl mb-4">
-          <button className="flex-1 py-2 px-3 text-sm font-medium rounded-lg bg-card shadow-sm text-foreground">
-            Converter
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIsRightSidebarOpen(!isRightSidebarOpen)}
+            className="p-2 rounded-xl bg-secondary text-foreground"
+          >
+            <MapPin className="w-5 h-5" />
           </button>
-          <button className="flex-1 py-2 px-3 text-sm font-medium rounded-lg text-muted-foreground hover:text-foreground transition-colors">
-            Planner
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="p-2 rounded-xl bg-secondary text-foreground"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Left Sidebar - Cities (Mobile Drawer) */}
+      <aside className={cn(
+        "fixed inset-y-0 left-0 z-40 w-80 bg-card border-r border-border flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0",
+        isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+      )}>
+        <div className="flex items-center justify-between p-4 border-b border-border lg:hidden">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-chart-3/10 flex items-center justify-center">
+              <Globe className="w-5 h-5 text-chart-3" />
+            </div>
+            <div>
+              <h2 className="font-bold text-foreground">TimeSync</h2>
+              <p className="text-xs text-muted-foreground">World Time Converter</p>
+            </div>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="p-2 rounded-xl hover:bg-secondary">
+            <X className="w-5 h-5 text-muted-foreground" />
           </button>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-semibold text-foreground">World Clocks</span>
-          <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded-lg">
-            {selectedCities.length}/6
-          </span>
+        <div className="p-4 hidden lg:block">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-11 h-11 rounded-xl bg-chart-3/10 flex items-center justify-center">
+              <Globe className="w-6 h-6 text-chart-3" />
+            </div>
+            <div>
+              <h2 className="font-bold text-lg text-foreground">TimeSync</h2>
+              <p className="text-xs text-muted-foreground">World Time Converter</p>
+            </div>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+        <div className="px-8 pb-4">
+          <div className="flex gap-1 p-1 bg-secondary rounded-xl mb-4">
+            <button className="flex-1 py-2 px-12 pb-2 text-sm font-medium rounded-lg  ">
+              Converter
+            </button>
+           
+          </div>
+        </div>
+
+        <div className="px-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-semibold text-foreground">World Clocks</span>
+            <span className="text-xs text-muted-foreground px-2 py-1 bg-secondary rounded-lg">
+              {selectedCities.length}/6
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
           {selectedCities.map((city, index) => {
             const isDay = isDaytime(city.timezone)
             const diff =
@@ -422,7 +494,7 @@ export function TimeSync() {
 
         {/* Favorites Section */}
         {favoriteCities.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-border">
+          <div className="mt-4 pt-4 border-t border-border px-4 pb-4">
             <div className="flex items-center gap-2 mb-2">
               <Star className="w-4 h-4 text-chart-4 fill-chart-4" />
               <span className="text-sm font-medium text-foreground">Favorites</span>
@@ -443,25 +515,30 @@ export function TimeSync() {
         )}
       </aside>
 
+      {/* Mobile overlay for left sidebar */}
+      {isSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 p-8 flex flex-col overflow-y-auto">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 flex flex-col overflow-y-auto">
         <div className="flex-1">
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-chart-3/10 text-chart-3 text-sm font-medium mb-4">
-                <Clock className="w-4 h-4" />
+            <div className="text-center mb-6 sm:mb-8">
+              <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-chart-3/10 text-chart-3 text-xs sm:text-sm font-medium mb-3 sm:mb-4">
+                <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
                 <span>130+ Cities Worldwide</span>
               </div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">
+              <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
                 Compare Time Zones
               </h1>
-              <p className="text-muted-foreground">
+              <p className="text-sm sm:text-base text-muted-foreground">
                 Slide to explore different times across your selected cities
               </p>
             </div>
 
             {/* Time Comparison Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8">
               {selectedCities.slice(0, 3).map((city, index) => {
                 const isDay = isDaytime(city.timezone)
                 const diff = index > 0 ? getTimeDifference(selectedCities[0].timezone, city.timezone) : 0
@@ -469,36 +546,36 @@ export function TimeSync() {
                   <div
                     key={city.id}
                     className={cn(
-                      "p-6 rounded-2xl border transition-all relative overflow-hidden",
+                      "p-4 sm:p-6 rounded-2xl border transition-all relative overflow-hidden",
                       isDay
                         ? "bg-gradient-to-br from-chart-4/10 to-chart-4/5 border-chart-4/20"
                         : "bg-gradient-to-br from-chart-3/10 to-chart-3/5 border-chart-3/20"
                     )}
                   >
                     {index === 0 && (
-                      <span className="absolute top-3 right-3 text-xs font-medium px-2 py-1 rounded-lg bg-chart-3 text-white">
+                      <span className="absolute top-2 right-2 sm:top-3 sm:right-3 text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg bg-chart-3 text-white">
                         Reference
                       </span>
                     )}
-                    <div className="flex items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2 mb-3 sm:mb-4">
                       {isDay ? (
-                        <Sun className="w-5 h-5 text-chart-4" />
+                        <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-chart-4" />
                       ) : (
-                        <Moon className="w-5 h-5 text-chart-3" />
+                        <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-chart-3" />
                       )}
-                      <span className="text-sm font-medium text-muted-foreground">
+                      <span className="text-xs sm:text-sm font-medium text-muted-foreground">
                         {isDay ? "Daytime" : "Nighttime"}
                       </span>
                     </div>
-                    <p className="text-4xl font-bold text-foreground mb-1 tabular-nums">
+                    <p className="text-3xl sm:text-4xl font-bold text-foreground mb-1 tabular-nums">
                       {getFullTimeInTimezone(city.timezone, sliderOffset)}
                     </p>
-                    <p className="text-lg font-medium text-foreground">{city.name}</p>
+                    <p className="text-base sm:text-lg font-medium text-foreground">{city.name}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-sm text-muted-foreground">{city.country}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{city.country}</p>
                       {index > 0 && (
                         <span className={cn(
-                          "text-xs font-medium px-2 py-0.5 rounded",
+                          "text-[10px] sm:text-xs font-medium px-1.5 sm:px-2 py-0.5 rounded",
                           diff >= 0 ? "bg-accent/20 text-accent" : "bg-destructive/20 text-destructive"
                         )}>
                           {diff >= 0 ? "+" : ""}{diff}h
@@ -512,19 +589,19 @@ export function TimeSync() {
 
             {/* Additional Cities Row */}
             {selectedCities.length > 3 && (
-              <div className="grid grid-cols-3 gap-3 mb-8">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 mb-6 sm:mb-8">
                 {selectedCities.slice(3).map((city) => {
                   const diff = getTimeDifference(selectedCities[0].timezone, city.timezone)
                   return (
-                    <div key={city.id} className="p-4 rounded-xl bg-card border border-border">
-                      <p className="text-2xl font-bold text-foreground tabular-nums">
+                    <div key={city.id} className="p-3 sm:p-4 rounded-xl bg-card border border-border">
+                      <p className="text-xl sm:text-2xl font-bold text-foreground tabular-nums">
                         {getTimeInTimezone(city.timezone, sliderOffset)}
                       </p>
                       <p className="text-sm font-medium text-foreground">{city.name}</p>
                       <div className="flex items-center justify-between">
-                        <p className="text-xs text-muted-foreground">{city.country}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">{city.country}</p>
                         <span className={cn(
-                          "text-xs font-medium",
+                          "text-[10px] sm:text-xs font-medium",
                           diff >= 0 ? "text-accent" : "text-destructive"
                         )}>
                           {diff >= 0 ? "+" : ""}{diff}h
@@ -537,7 +614,7 @@ export function TimeSync() {
             )}
 
             {/* Time Slider */}
-            <div className="bg-card rounded-2xl p-6 border border-border mb-8">
+            <div className="bg-card rounded-2xl p-4 sm:p-6 border border-border mb-6 sm:mb-8">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm font-medium text-foreground">Time Offset</span>
                 <span className="text-sm font-semibold text-chart-3 bg-chart-3/10 px-3 py-1 rounded-lg">
@@ -545,8 +622,8 @@ export function TimeSync() {
                   {sliderOffset}h from now
                 </span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-muted-foreground w-8">-12h</span>
+              <div className="flex items-center gap-2 sm:gap-4">
+                <span className="text-xs text-muted-foreground w-6 sm:w-8">-12h</span>
                 <input
                   type="range"
                   min={-12}
@@ -555,17 +632,17 @@ export function TimeSync() {
                   onChange={(e) => setSliderOffset(Number(e.target.value))}
                   className="flex-1 accent-chart-3 h-2"
                 />
-                <span className="text-xs text-muted-foreground w-8">+12h</span>
+                <span className="text-xs text-muted-foreground w-6 sm:w-8">+12h</span>
               </div>
-              <div className="flex items-center justify-center gap-3 mt-4 flex-wrap">
+              <div className="flex items-center justify-center gap-2 sm:gap-3 mt-4 flex-wrap">
                 {selectedCities.slice(0, 4).map((city, index) => (
-                  <div key={city.id} className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground tabular-nums">
+                  <div key={city.id} className="flex items-center gap-1 sm:gap-2">
+                    <span className="text-xs sm:text-sm font-medium text-foreground tabular-nums">
                       {getTimeInTimezone(city.timezone, sliderOffset)}
                     </span>
-                    <span className="text-xs text-muted-foreground">{city.name}</span>
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">{city.name}</span>
                     {index < Math.min(selectedCities.length - 1, 3) && (
-                      <ArrowRight className="w-3 h-3 text-muted-foreground mx-1" />
+                      <ArrowRight className="w-2 h-2 sm:w-3 sm:h-3 text-muted-foreground mx-0.5 sm:mx-1" />
                     )}
                   </div>
                 ))}
@@ -573,10 +650,10 @@ export function TimeSync() {
             </div>
 
             {/* Best Meeting Times */}
-            <div className="bg-card rounded-2xl p-6 border border-border">
+            <div className="bg-card rounded-2xl p-4 sm:p-6 border border-border">
               <div className="flex items-center gap-2 mb-4">
-                <Users className="w-5 h-5 text-accent" />
-                <span className="font-semibold text-foreground">Best Meeting Times</span>
+                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-accent" />
+                <span className="font-semibold text-foreground text-sm sm:text-base">Best Meeting Times</span>
                 <span className="text-xs text-muted-foreground ml-auto">Business hours overlap</span>
               </div>
               {getMeetingSlots().length > 0 ? (
@@ -584,9 +661,9 @@ export function TimeSync() {
                   {getMeetingSlots().map((hour) => (
                     <div
                       key={hour}
-                      className="flex items-center justify-between p-3 rounded-xl bg-accent/5 border border-accent/10"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-xl bg-accent/5 border border-accent/10 gap-2"
                     >
-                      <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-3 flex-wrap">
                         {selectedCities.slice(0, 4).map((city, index) => {
                           let cityHour =
                             (hour +
@@ -596,19 +673,19 @@ export function TimeSync() {
                             24
                           if (cityHour < 0) cityHour += 24
                           return (
-                            <div key={city.id} className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-foreground tabular-nums">
+                            <div key={city.id} className="flex items-center gap-1 sm:gap-2">
+                              <span className="text-xs sm:text-sm font-medium text-foreground tabular-nums">
                                 {String(cityHour).padStart(2, "0")}:00
                               </span>
-                              <span className="text-xs text-muted-foreground">{city.name}</span>
+                              <span className="text-[10px] sm:text-xs text-muted-foreground">{city.name}</span>
                               {index < Math.min(selectedCities.length - 1, 3) && (
-                                <ArrowRight className="w-3 h-3 text-muted-foreground mx-1" />
+                                <ArrowRight className="w-2 h-2 sm:w-3 sm:h-3 text-muted-foreground mx-0.5 sm:mx-1" />
                               )}
                             </div>
                           )
                         })}
                       </div>
-                      <span className="text-xs font-medium text-accent bg-accent/10 px-2 py-1 rounded-lg">
+                      <span className="text-[10px] sm:text-xs font-medium text-accent bg-accent/10 px-2 py-1 rounded-lg self-start sm:self-center">
                         Good
                       </span>
                     </div>
@@ -616,9 +693,9 @@ export function TimeSync() {
                 </div>
               ) : (
                 <div className="text-center py-6 text-muted-foreground">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No overlapping business hours found</p>
-                  <p className="text-xs">Try removing cities with extreme time differences</p>
+                  <Calendar className="w-6 h-6 sm:w-8 sm:h-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-xs sm:text-sm">No overlapping business hours found</p>
+                  <p className="text-[10px] sm:text-xs">Try removing cities with extreme time differences</p>
                 </div>
               )}
             </div>
@@ -626,9 +703,19 @@ export function TimeSync() {
         </div>
       </main>
 
-      {/* Right Sidebar - Map Preview & Quick Add */}
-      <aside className="w-80 border-l border-border bg-card p-4 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
+      {/* Right Sidebar - Map Preview & Quick Add (Mobile Drawer) */}
+      <aside className={cn(
+        "fixed inset-y-0 right-0 z-40 w-80 bg-card border-l border-border p-4 flex flex-col transition-transform duration-300 lg:relative lg:translate-x-0",
+        isRightSidebarOpen ? "translate-x-0" : "translate-x-full"
+      )}>
+        <div className="flex items-center justify-between mb-4 lg:hidden">
+          <span className="font-semibold text-foreground">World Map</span>
+          <button onClick={() => setIsRightSidebarOpen(false)} className="p-2 rounded-xl hover:bg-secondary">
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="flex items-center justify-between mb-4 hidden lg:flex">
           <span className="font-semibold text-foreground">World Map</span>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <MapPin className="w-3 h-3" />
@@ -637,7 +724,6 @@ export function TimeSync() {
         </div>
 
         <div className="bg-gradient-to-br from-chart-3/5 to-chart-3/10 rounded-2xl p-4 mb-6 aspect-video relative overflow-hidden">
-          {/* Simplified World Map */}
           <svg viewBox="0 0 200 100" className="w-full h-full opacity-30">
             <ellipse cx="100" cy="50" rx="95" ry="45" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-chart-3" />
             <ellipse cx="100" cy="50" rx="95" ry="45" fill="none" stroke="currentColor" strokeWidth="0.5" className="text-chart-3" transform="rotate(30 100 50)" />
@@ -645,7 +731,6 @@ export function TimeSync() {
             <line x1="5" y1="50" x2="195" y2="50" stroke="currentColor" strokeWidth="0.5" className="text-chart-3" />
           </svg>
           
-          {/* City Markers */}
           {selectedCities.map((city, idx) => {
             const x = ((city.lng + 180) / 360) * 100
             const y = ((90 - city.lat) / 180) * 100
@@ -653,12 +738,12 @@ export function TimeSync() {
               <div
                 key={city.id}
                 className={cn(
-                  "absolute w-3 h-3 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2",
+                  "absolute w-2 h-2 sm:w-3 sm:h-3 rounded-full border-2 border-white shadow-lg transform -translate-x-1/2 -translate-y-1/2",
                   idx === 0 ? "bg-chart-3" : "bg-chart-4"
                 )}
                 style={{ left: `${x}%`, top: `${y}%` }}
               >
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-medium text-foreground bg-card px-2 py-0.5 rounded shadow-sm">
+                <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] sm:text-xs font-medium text-foreground bg-card px-1.5 sm:px-2 py-0.5 rounded shadow-sm">
                   {city.name}
                 </div>
               </div>
@@ -666,13 +751,12 @@ export function TimeSync() {
           })}
         </div>
 
-        {/* Region Stats */}
         <div className="mb-4">
           <span className="text-sm font-medium text-foreground mb-2 block">Coverage by Region</span>
           <div className="grid grid-cols-2 gap-2">
             {Object.entries(citiesByRegion).slice(0, 6).map(([region, cities]) => (
               <div key={region} className="p-2 rounded-lg bg-secondary/50">
-                <p className="text-xs font-medium text-foreground">{region}</p>
+                <p className="text-xs font-medium text-foreground truncate">{region}</p>
                 <p className="text-xs text-muted-foreground">{cities.length} cities</p>
               </div>
             ))}
@@ -692,23 +776,28 @@ export function TimeSync() {
                   key={city.id}
                   onClick={() => addCity(city)}
                   disabled={selectedCities.length >= 6}
-                  className="p-3 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="p-2 sm:p-3 rounded-xl bg-secondary hover:bg-secondary/80 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <p className="text-sm font-medium text-foreground truncate">{city.name}</p>
-                  <p className="text-xs text-muted-foreground tabular-nums">{getTimeInTimezone(city.timezone)}</p>
+                  <p className="text-xs sm:text-sm font-medium text-foreground truncate">{city.name}</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground tabular-nums">{getTimeInTimezone(city.timezone)}</p>
                 </button>
               ))}
           </div>
         </div>
       </aside>
 
+      {/* Mobile overlay for right sidebar */}
+      {isRightSidebarOpen && (
+        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setIsRightSidebarOpen(false)} />
+      )}
+
       {/* City Picker Modal */}
       {showCityPicker && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-6 border-b border-border">
+            <div className="p-4 sm:p-6 border-b border-border">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-foreground">Add City</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-foreground">Add City</h3>
                 <button
                   onClick={() => {
                     setShowCityPicker(false)
@@ -721,27 +810,25 @@ export function TimeSync() {
                 </button>
               </div>
               
-              {/* Search */}
               <div className="relative mb-4">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Search 130+ cities worldwide..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 rounded-xl bg-secondary border-0 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-chart-3"
+                  className="w-full pl-10 sm:pl-12 pr-4 py-2 sm:py-3 rounded-xl bg-secondary border-0 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-chart-3 text-sm sm:text-base"
                   autoFocus
                 />
               </div>
 
-              {/* Region Filter */}
               <div className="flex gap-2 flex-wrap">
                 {REGIONS.map((region) => (
                   <button
                     key={region}
                     onClick={() => setSelectedRegion(region)}
                     className={cn(
-                      "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                      "px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors",
                       selectedRegion === region
                         ? "bg-chart-3 text-white"
                         : "bg-secondary text-muted-foreground hover:text-foreground"
@@ -753,39 +840,38 @@ export function TimeSync() {
               </div>
             </div>
 
-            {/* City List */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {filteredCities.map((city) => (
                   <button
                     key={city.id}
                     onClick={() => addCity(city)}
-                    className="p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors text-left group"
+                    className="p-3 sm:p-4 rounded-xl bg-secondary/50 hover:bg-secondary transition-colors text-left group"
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-medium text-foreground group-hover:text-chart-3 transition-colors">{city.name}</p>
-                        <p className="text-xs text-muted-foreground">{city.country}</p>
+                        <p className="font-medium text-foreground group-hover:text-chart-3 transition-colors text-sm sm:text-base">{city.name}</p>
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">{city.country}</p>
                       </div>
-                      <span className="text-sm font-medium text-muted-foreground tabular-nums">
+                      <span className="text-xs sm:text-sm font-medium text-muted-foreground tabular-nums">
                         {getTimeInTimezone(city.timezone)}
                       </span>
                     </div>
-                    <span className="text-xs text-muted-foreground mt-1 inline-block">{city.region}</span>
+                    <span className="text-[10px] sm:text-xs text-muted-foreground mt-1 inline-block">{city.region}</span>
                   </button>
                 ))}
               </div>
               {filteredCities.length === 0 && (
-                <div className="text-center py-12 text-muted-foreground">
-                  <Globe className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">No cities found</p>
-                  <p className="text-sm">Try a different search term or region</p>
+                <div className="text-center py-8 sm:py-12 text-muted-foreground">
+                  <Globe className="w-8 h-8 sm:w-12 sm:h-12 mx-auto mb-3 opacity-30" />
+                  <p className="font-medium text-sm sm:text-base">No cities found</p>
+                  <p className="text-xs sm:text-sm">Try a different search term or region</p>
                 </div>
               )}
             </div>
 
-            <div className="p-4 border-t border-border bg-secondary/30">
-              <p className="text-xs text-muted-foreground text-center">
+            <div className="p-3 sm:p-4 border-t border-border bg-secondary/30">
+              <p className="text-[10px] sm:text-xs text-muted-foreground text-center">
                 {filteredCities.length} cities available | Select up to 6 cities for comparison
               </p>
             </div>

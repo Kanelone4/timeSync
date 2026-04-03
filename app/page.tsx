@@ -35,10 +35,6 @@ export default function Page() {
               <Clock className="w-4 h-4 text-chart-3" />
               <span>Converter</span>
             </button>
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
-              <Users className="w-4 h-4" />
-              <span>Meeting Planner</span>
-            </button>
           </nav>
         </div>
 
